@@ -1,8 +1,17 @@
+import io
 import random
 import unittest
+from unittest.mock import patch
 
 from werewolf_game import AttackAlert, DeviceClass, GameEngine, NearbyDevice
-from werewolf_game.engine import ENERGY_CAP, MAX_EVENT_LOG, SHIELD_CAP
+from werewolf_game.__main__ import main
+from werewolf_game.engine import (
+    ENERGY_CAP,
+    MAX_ALERT_REPLAY_IDS,
+    MAX_EVENT_LOG,
+    MAX_RESOLVED_ALERT_REPLAY_IDS,
+    SHIELD_CAP,
+)
 
 
 NOW = 1_000
@@ -102,6 +111,54 @@ class GameEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "active trusted alert"):
             engine.charge_shield(10)
 
+    def test_cli_allows_default_zero_charge_without_alert(self) -> None:
+        scenario = {"current_time": NOW, "devices": []}
+
+        with (
+            patch("sys.argv", ["werewolf_game", "scenario.json"]),
+            patch("werewolf_game.__main__._load_scenario", return_value=scenario),
+            patch("sys.stdout", new_callable=io.StringIO) as output,
+        ):
+            main()
+
+        self.assertIn('"mode": "dormant"', output.getvalue())
+
+    def test_cli_rejects_nonzero_charge_without_alert(self) -> None:
+        scenario = {"current_time": NOW, "devices": [], "shield_charge": 1}
+
+        with (
+            patch("sys.argv", ["werewolf_game", "scenario.json"]),
+            patch("werewolf_game.__main__._load_scenario", return_value=scenario),
+            self.assertRaisesRegex(ValueError, "active trusted alert"),
+        ):
+            main()
+
+    def test_json_boolean_fields_require_actual_booleans(self) -> None:
+        alert_value = {
+            "alert_id": "alert",
+            "detector": "detector",
+            "target_device_id": "target",
+            "reason": "reason",
+            "severity": 1,
+            "trusted": "false",
+        }
+        with self.assertRaisesRegex(ValueError, "trusted must be a boolean"):
+            AttackAlert.from_dict(alert_value)
+
+        base_device = {
+            "device_id": "device",
+            "device_class": "nano",
+            "signal_dbm": -40,
+        }
+        for field_name in ("opted_in", "game_beacon_valid", "connected_first"):
+            with self.subTest(field_name=field_name):
+                with self.assertRaisesRegex(
+                    ValueError, rf"{field_name} must be a boolean"
+                ):
+                    NearbyDevice.from_dict(
+                        {**base_device, field_name: "false"}
+                    )
+
     def test_power_source_adds_energy_during_incident(self) -> None:
         engine = self.make_engine()
         engine.report_attack(alert("attacker"))
@@ -123,6 +180,48 @@ class GameEngineTests(unittest.TestCase):
         self.assertEqual(engine.state.energy, 50)
         self.assertEqual(result.rejection_reasons["fruit"], "replayed")
         self.assertEqual(engine.state.metrics.replayed_beacons, 1)
+
+    def test_beacon_replay_tracking_expires_with_beacon(self) -> None:
+        now = [NOW]
+        engine = GameEngine(clock=lambda: now[0])
+        original = device("nano", DeviceClass.NANO, expires_at=NOW + 1)
+
+        self.assertEqual(engine.scan([original]).accepted, (original,))
+        now[0] = NOW + 1
+        self.assertEqual(
+            engine.scan([original]).rejection_reasons["nano"],
+            "replayed",
+        )
+        now[0] = NOW + 2
+        replacement = device(
+            "nano",
+            DeviceClass.NANO,
+            issued_at=NOW + 2,
+            expires_at=NOW + 12,
+        )
+        self.assertEqual(engine.scan([replacement]).accepted, (replacement,))
+        self.assertEqual(len(engine._seen_beacons), 1)
+
+    def test_beacon_replay_tracking_stays_bounded_under_load(self) -> None:
+        now = [NOW]
+        engine = GameEngine(clock=lambda: now[0])
+
+        for batch in range(20):
+            engine.scan(
+                [
+                    device(
+                        f"nano-{batch}-{index}",
+                        DeviceClass.NANO,
+                        issued_at=now[0],
+                        expires_at=now[0] + 1,
+                    )
+                    for index in range(100)
+                ]
+            )
+            now[0] += 2
+
+        engine.scan([])
+        self.assertEqual(engine._seen_beacons, {})
 
     def test_expired_future_and_overlong_beacons_are_rejected(self) -> None:
         engine = self.make_engine()
@@ -197,6 +296,42 @@ class GameEngineTests(unittest.TestCase):
             )
 
         self.assertEqual(len(engine.state.event_log), MAX_EVENT_LOG)
+
+    def test_alert_replay_tracking_is_bounded_and_current_alert_fails_closed(
+        self,
+    ) -> None:
+        engine = self.make_engine()
+
+        for index in range(MAX_ALERT_REPLAY_IDS + 100):
+            current = alert(
+                target=f"target-{index}",
+                alert_id=f"alert-{index}",
+            )
+            self.assertTrue(engine.report_attack(current))
+
+        self.assertLessEqual(len(engine._seen_alerts), MAX_ALERT_REPLAY_IDS)
+        self.assertFalse(engine.report_attack(current))
+
+    def test_resolved_alert_tracking_is_bounded_and_current_alert_fails_closed(
+        self,
+    ) -> None:
+        engine = self.make_engine()
+
+        for index in range(MAX_RESOLVED_ALERT_REPLAY_IDS + 100):
+            target = device(f"target-{index}", DeviceClass.FLIPPER)
+            self.assertTrue(
+                engine.report_attack(
+                    alert(target.device_id, alert_id=f"resolved-{index}")
+                )
+            )
+            engine.defend(target)
+
+        self.assertLessEqual(
+            len(engine._resolved_alerts),
+            MAX_RESOLVED_ALERT_REPLAY_IDS,
+        )
+        with self.assertRaisesRegex(ValueError, "already been resolved"):
+            engine.defend(target)
 
     def test_deterministic_adversarial_sequence_preserves_invariants(self) -> None:
         rng = random.Random(2025)

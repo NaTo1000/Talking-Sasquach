@@ -83,6 +83,8 @@ Only the host integration may set `trusted` after authenticating the detector. U
 
 The suite exercises trust-boundary separation, invalid alerts, duplicate alerts, expired/future/overlong beacons, replayed reinforcement, inactive-incident behavior, single-resolution alerts, target binding, first-connect disadvantage, bounded logs, recovery to dormant state, and 2,000 deterministic adversarial state transitions. Production integration must add authenticated-detector tests, cryptographic test vectors, rate-limit/load tests, power-loss and rollback injection, storage exhaustion, malformed transport fuzzing, concurrency tests, hardware-in-the-loop tests, and independent security review.
 
+In-memory beacon replay entries expire with their validated beacon lifetime. Alert and resolved-alert replay stores retain the newest 1,024 IDs while always preserving the active alert; production deployments that require a longer replay window should replace these stores with bounded persistent storage and an explicit retention policy.
+
 Run the reproducible quality gate and produce machine-readable evidence:
 
 ```powershell

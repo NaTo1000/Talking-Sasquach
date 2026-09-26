@@ -34,7 +34,9 @@ def main() -> None:
         if not engine.report_attack(AttackAlert.from_dict(scenario["attack_alert"])):
             raise ValueError("Scenario attack alert was rejected")
     result = engine.scan(devices)
-    engine.charge_shield(int(scenario.get("shield_charge", 0)))
+    shield_charge = int(scenario.get("shield_charge", 0))
+    if shield_charge != 0:
+        engine.charge_shield(shield_charge)
 
     attacker_id = scenario.get("attacker_device_id")
     if attacker_id is not None:

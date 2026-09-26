@@ -5,6 +5,13 @@ from enum import Enum
 from typing import Any
 
 
+def _boolean(value: dict[str, Any], field_name: str) -> bool:
+    parsed = value.get(field_name, False)
+    if type(parsed) is not bool:
+        raise ValueError(f"{field_name} must be a boolean")
+    return parsed
+
+
 class DeviceClass(str, Enum):
     FLIPPER = "flipper"
     PWNAGOTCHI = "pwnagotchi"
@@ -41,7 +48,7 @@ class AttackAlert:
             target_device_id=str(value["target_device_id"]),
             reason=str(value["reason"]),
             severity=int(value["severity"]),
-            trusted=bool(value.get("trusted", False)),
+            trusted=_boolean(value, "trusted"),
         )
 
 
@@ -64,10 +71,10 @@ class NearbyDevice:
             device_id=str(value["device_id"]),
             device_class=DeviceClass(value.get("device_class", "other")),
             signal_dbm=int(value.get("signal_dbm", -100)),
-            opted_in=bool(value.get("opted_in", False)),
-            game_beacon_valid=bool(value.get("game_beacon_valid", False)),
+            opted_in=_boolean(value, "opted_in"),
+            game_beacon_valid=_boolean(value, "game_beacon_valid"),
             battle_power=max(0, int(value.get("battle_power", 0))),
-            connected_first=bool(value.get("connected_first", False)),
+            connected_first=_boolean(value, "connected_first"),
             beacon_id=(
                 str(value["beacon_id"]) if value.get("beacon_id") is not None else None
             ),

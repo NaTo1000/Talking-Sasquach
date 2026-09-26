@@ -26,6 +26,8 @@ ENERGY_CAP = 100
 SHIELD_CAP = 60
 MAX_EVENT_LOG = 500
 MAX_BEACON_LIFETIME_SECONDS = 300
+MAX_ALERT_REPLAY_IDS = 1_024
+MAX_RESOLVED_ALERT_REPLAY_IDS = 1_024
 
 
 @dataclass(frozen=True)
@@ -83,9 +85,9 @@ class GameEngine:
         self.state = state or GameState()
         self.assistants = AssistantSuite()
         self._clock = clock
-        self._seen_beacons: set[str] = set()
-        self._seen_alerts: set[str] = set()
-        self._resolved_alerts: set[str] = set()
+        self._seen_beacons: dict[str, int] = {}
+        self._seen_alerts: dict[str, None] = {}
+        self._resolved_alerts: dict[str, None] = {}
         self._active_alert: AttackAlert | None = None
 
     def report_attack(self, alert: AttackAlert) -> bool:
@@ -103,8 +105,12 @@ class GameEngine:
             self._event("alert_rejected", alert_id=alert.alert_id)
             return False
 
-        self._seen_alerts.add(alert.alert_id)
         self._active_alert = alert
+        self._remember_replay_id(
+            self._seen_alerts,
+            alert.alert_id,
+            MAX_ALERT_REPLAY_IDS,
+        )
         self.state.metrics.attacks_detected += 1
         if self.state.mode is GameMode.DORMANT:
             self.state.metrics.guard_mode_entries += 1
@@ -139,12 +145,15 @@ class GameEngine:
         metrics.scans += 1
         metrics.devices_seen += len(nearby)
         now = int(self._clock())
+        self._prune_expired_beacons(now)
 
         for device in nearby:
             reason = self._validate_beacon(device, now)
             if reason is None:
                 accepted.append(device)
-                self._seen_beacons.add(device.beacon_id or "")
+                self._seen_beacons[device.beacon_id or ""] = (
+                    device.expires_at if device.expires_at is not None else now
+                )
             else:
                 ignored.append(device)
                 rejection_reasons[device.device_id] = reason
@@ -242,7 +251,11 @@ class GameEngine:
 
         self.state.energy = max(0, self.state.energy - 15)
         self.state.mode = GameMode.GUARD
-        self._resolved_alerts.add(self._active_alert.alert_id)
+        self._remember_replay_id(
+            self._resolved_alerts,
+            self._active_alert.alert_id,
+            MAX_RESOLVED_ALERT_REPLAY_IDS,
+        )
         self._event(
             "defence",
             opponent_id=opponent.device_id,
@@ -276,6 +289,29 @@ class GameEngine:
         if device.beacon_id in self._seen_beacons:
             return "replayed"
         return None
+
+    def _prune_expired_beacons(self, now: int) -> None:
+        self._seen_beacons = {
+            beacon_id: expires_at
+            for beacon_id, expires_at in self._seen_beacons.items()
+            if expires_at >= now
+        }
+
+    def _remember_replay_id(
+        self,
+        replay_ids: dict[str, None],
+        replay_id: str,
+        limit: int,
+    ) -> None:
+        replay_ids[replay_id] = None
+        protected_id = (
+            self._active_alert.alert_id if self._active_alert is not None else None
+        )
+        while len(replay_ids) > limit:
+            oldest_id = next(
+                candidate for candidate in replay_ids if candidate != protected_id
+            )
+            del replay_ids[oldest_id]
 
     def _assert_invariants(self) -> None:
         if not 0 <= self.state.energy <= ENERGY_CAP:
