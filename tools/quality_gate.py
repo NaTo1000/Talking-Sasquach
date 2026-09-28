@@ -74,6 +74,13 @@ def main() -> int:
                 "examples/werewolf-hunt.json",
             ],
         ),
+        run_check(
+            "package_smoke",
+            [
+                sys.executable,
+                "tools/package_smoke.py",
+            ],
+        ),
     ]
     report = {
         "schema_version": 1,

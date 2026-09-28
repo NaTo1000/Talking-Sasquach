@@ -6,11 +6,12 @@ prototype into an externally testable desktop Python application.
 ## Straight status
 
 The current code is a working **reference prototype**, not a complete desktop
-product. On 2026-09-28 the quality gate compiled the package, passed all 21
-tests, and completed the reference scenario. That verifies the implemented
-Python behavior only. It does not verify real hardware integration, production
-cryptography, operating-system containment, a graphical interface, packaging,
-or deployment.
+product. On 2026-09-28 the Gate 2 quality run compiled the package, passed all
+27 tests, completed the reference scenario, built wheel and source artifacts,
+installed the wheel in a clean environment, executed the installed command,
+and uninstalled it. That verifies the implemented Python behavior and
+packaging only. It does not verify real hardware integration, production
+cryptography, operating-system containment, or a graphical interface.
 
 ## Completion rule
 
@@ -86,20 +87,27 @@ at least one planned verification method.
 
 ## Phase 2: installable application package
 
-- [ ] Add `pyproject.toml` with package metadata and supported Python version.
-- [ ] Add a versioned `werewolf` console entry point.
-- [ ] Separate domain, application, adapter, and presentation layers.
-- [ ] Add typed configuration with secure defaults.
-- [ ] Add `--version`, `--help`, `check`, `run`, and `report` commands.
-- [ ] Return documented process exit codes for success and each failure class.
-- [ ] Prevent stack traces for expected user-input failures.
-- [ ] Add clean-environment installation and uninstall tests.
-- [ ] Build wheel and source artifacts without undeclared files.
-- [ ] Add an offline smoke test for installed artifacts.
+- [x] Add `pyproject.toml` with package metadata and supported Python version.
+- [x] Add a versioned `werewolf` console entry point.
+- [x] Separate domain, application, configuration, and presentation modules.
+- [x] Add typed configuration with secure defaults.
+- [x] Add `--version`, `--help`, `check`, `run`, and `report` commands.
+- [x] Return documented process exit codes for success and each failure class.
+- [x] Prevent stack traces for expected user-input failures.
+- [x] Add clean-environment installation and uninstall tests.
+- [x] Build wheel and source artifacts without undeclared assets.
+- [x] Add an offline, isolated smoke test for installed artifacts.
 
 **Gate:** a tester can create a clean virtual environment, install the wheel,
 run `werewolf check`, execute the example, and uninstall it using only the
 release instructions.
+
+**Verified environment:** Windows with Python 3.14.6. The package declares
+Python 3.10+, but the remaining Python/OS matrix is a research directive and
+must not be described as verified yet.
+
+**Exit codes:** `0` success, `2` expected input/contract error, `3` report-write
+failure. Argument parser usage failures also use `2`.
 
 ## Phase 3: versioned input and configuration contracts
 

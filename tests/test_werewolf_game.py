@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from werewolf_game import AttackAlert, DeviceClass, GameEngine, NearbyDevice
-from werewolf_game.__main__ import main
+from werewolf_game.cli import EXIT_INPUT_ERROR, EXIT_SUCCESS, main
 from werewolf_game.engine import (
     ENERGY_CAP,
     MAX_ALERT_REPLAY_IDS,
@@ -116,22 +116,36 @@ class GameEngineTests(unittest.TestCase):
 
         with (
             patch("sys.argv", ["werewolf_game", "scenario.json"]),
-            patch("werewolf_game.__main__._load_scenario", return_value=scenario),
+            patch("werewolf_game.cli.run_file") as run_file,
             patch("sys.stdout", new_callable=io.StringIO) as output,
         ):
-            main()
+            from werewolf_game.application import RunResult
 
+            run_file.return_value = RunResult(
+                state={"mode": "dormant"},
+                accepted_devices=0,
+                ignored_devices=0,
+            )
+            exit_code = main()
+
+        self.assertEqual(exit_code, EXIT_SUCCESS)
         self.assertIn('"mode": "dormant"', output.getvalue())
 
     def test_cli_rejects_nonzero_charge_without_alert(self) -> None:
-        scenario = {"current_time": NOW, "devices": [], "shield_charge": 1}
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
 
-        with (
-            patch("sys.argv", ["werewolf_game", "scenario.json"]),
-            patch("werewolf_game.__main__._load_scenario", return_value=scenario),
-            self.assertRaisesRegex(ValueError, "active trusted alert"),
-        ):
-            main()
+        scenario = '{"current_time":1000,"devices":[],"shield_charge":1}'
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "scenario.json"
+            path.write_text(scenario, encoding="utf-8")
+            with (
+                patch("sys.stderr", new_callable=io.StringIO) as error,
+            ):
+                exit_code = main(["run", str(path)])
+
+        self.assertEqual(exit_code, EXIT_INPUT_ERROR)
+        self.assertIn("active trusted alert", error.getvalue())
 
     def test_json_boolean_fields_require_actual_booleans(self) -> None:
         alert_value = {

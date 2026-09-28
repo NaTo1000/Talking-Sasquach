@@ -39,3 +39,8 @@ The [Werewolf defensive-layer prototype](WEREWOLF_GAME.md) demonstrates attack-t
 The [desktop application production checklist](PRODUCTION_CHECKLIST.md) records
 what is verified, what remains incomplete, and the evidence required before any
 module or release may be called production-ready.
+
+The [compatibility audit](COMPATIBILITY_AUDIT.md) separates verified desktop
+capabilities from unverified hardware/assets. The
+[external research directives](RESEARCH_DIRECTIVES.md) provide independent
+work packets and a controlled inbox for findings from other models or people.
