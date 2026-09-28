@@ -35,3 +35,7 @@ SHOUTOUT TO ALL THE ANIMATORS OVER AT RogueMaster Custom Firmware.  They are the
 ## Werewolf Proximity Game Prototype
 
 The [Werewolf defensive-layer prototype](WEREWOLF_GAME.md) demonstrates attack-triggered guard mode, simulated energy collection, defence shields, incident skins, local tactical guidance, and full protection metrics. Nearby devices alone never activate it, and it never retaliates against, exploits, modifies, or damages another device.
+
+The [desktop application production checklist](PRODUCTION_CHECKLIST.md) records
+what is verified, what remains incomplete, and the evidence required before any
+module or release may be called production-ready.
